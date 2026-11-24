@@ -61,7 +61,7 @@ pub fn language_of(rel: &str) -> &'static str {
     if name == "cargo.lock" {
         return "toml";
     }
-    if name == "package-lock.json" {
+    if name == "package-lock.json" || name == "composer.lock" {
         return "json";
     }
     if name == "dockerfile" || name.starts_with("dockerfile.") || name.ends_with(".dockerfile") {
@@ -103,7 +103,7 @@ pub fn language_of(rel: &str) -> &'static str {
         "md" | "markdown" => "md",
         "sh" | "bash" | "zsh" | "ksh" => "sh",
         "yaml" | "yml" => "yaml",
-        "json" => "json",
+        "json" | "jsonc" => "json",
         "toml" => "toml",
         "xml" => "xml",
         // SQL in any letter case (`.SQL`); ahead of the MSBuild arm so `.sqlproj` stays `xml`.

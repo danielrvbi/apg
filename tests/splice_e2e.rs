@@ -1122,6 +1122,7 @@ fn cs_records(
             end: 1,
             start_line: 1,
             end_line: 20,
+            properties: Default::default(),
         });
         let funs: &[(&str, &str, u32)] = if named_h {
             &[("f1", "f", 2), ("f2", "h", 12)]
@@ -2178,6 +2179,7 @@ mod e2e {
                 end: 1,
                 start_line: 1,
                 end_line: 30,
+                properties: Default::default(),
             },
             Record::Function {
                 id: "f1".into(),
@@ -2354,6 +2356,7 @@ mod e2e {
                     end: 1,
                     start_line: 1,
                     end_line: 20,
+                    properties: Default::default(),
                 },
                 Record::Function {
                     id: "fb".into(),

@@ -1,7 +1,7 @@
 //! Per-file structure accumulation: the `Struct`/`contains` facts an emitter
 //! produces for one claimed file.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::lines::Span;
 use crate::record::Rec;
@@ -53,6 +53,18 @@ impl<'a> StructureBuilder<'a> {
         name: &str,
         span: Span,
     ) -> (String, String) {
+        self.add_with(parent, name, span, BTreeMap::new())
+    }
+
+    /// [`Self::add`] carrying per-node `properties` (the `json` stream's
+    /// pointer/type/value/items/truncated).
+    pub(crate) fn add_with(
+        &mut self,
+        parent: Option<(&str, &str)>,
+        name: &str,
+        span: Span,
+        properties: BTreeMap<String, String>,
+    ) -> (String, String) {
         let (parent_id, parent_fqn) = match parent {
             Some((id, fqn)) => (Some(id), fqn.to_string()),
             None => (None, self.path.clone()),
@@ -76,8 +88,40 @@ impl<'a> StructureBuilder<'a> {
             end: span.end,
             start_line: span.start_line,
             end_line: span.end_line,
+            properties,
         });
         (id, fqn)
+    }
+
+    /// Sets property `key` on the already-added Struct `id` (an existing value
+    /// is kept, with `value` appended after a comma).
+    pub(crate) fn mark(&mut self, id: &str, key: &str, value: &str) {
+        for rec in self.structs.iter_mut().rev() {
+            if let Rec::Struct {
+                id: rid,
+                properties,
+                ..
+            } = rec
+            {
+                if rid == id {
+                    properties
+                        .entry(key.to_string())
+                        .and_modify(|v| {
+                            if !v.split(',').any(|p| p == value) {
+                                v.push(',');
+                                v.push_str(value);
+                            }
+                        })
+                        .or_insert_with(|| value.to_string());
+                    return;
+                }
+            }
+        }
+    }
+
+    /// The number of Struct records added so far.
+    pub(crate) fn len(&self) -> usize {
+        self.structs.len()
     }
 
     /// Disambiguates `name` among its siblings so `parent.name` is unique in

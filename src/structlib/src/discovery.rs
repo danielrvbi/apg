@@ -89,7 +89,7 @@ pub(crate) fn stream_for_path(path: &Path) -> Option<&'static str> {
     if lower == "cargo.lock" {
         return Some("toml");
     }
-    if lower == "package-lock.json" {
+    if lower == "package-lock.json" || lower == "composer.lock" {
         return Some("json");
     }
     if lower == ".editorconfig"
@@ -104,7 +104,7 @@ pub(crate) fn stream_for_path(path: &Path) -> Option<&'static str> {
         Some("md") | Some("markdown") => "md",
         Some("sh") | Some("bash") | Some("zsh") | Some("ksh") => "sh",
         Some("yaml") | Some("yml") => "yaml",
-        Some("json") => "json",
+        Some("json") | Some("jsonc") => "json",
         Some("toml") => "toml",
         // MSBuild project/property/target files, .NET config and resources are XML.
         Some("xml") | Some("csproj") | Some("vbproj") | Some("vcxproj") | Some("sqlproj")

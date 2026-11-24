@@ -43,6 +43,10 @@ pub struct FragNode {
     pub category: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    /// A Struct's scanner-emitted metadata (the structural `json` stream's
+    /// `pointer`/`type`/`value`/`items`/`truncated`); empty for every other node.
+    #[serde(default, skip_serializing_if = "NodeProperties::is_empty")]
+    pub properties: NodeProperties,
 }
 
 impl FragNode {
@@ -62,6 +66,11 @@ impl FragNode {
             params: node.params.clone(),
             category: node.category.clone(),
             status: node.status.clone(),
+            properties: if node.kind == NodeKind::Struct {
+                node.properties.clone()
+            } else {
+                NodeProperties::new()
+            },
         }
     }
 
@@ -94,6 +103,7 @@ impl FragNode {
             category: self.category.clone(),
             code_type: self.code_type.clone(),
             status: self.status.clone(),
+            properties: self.properties.clone(),
             ..Node::default()
         }
     }

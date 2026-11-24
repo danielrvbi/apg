@@ -33,6 +33,11 @@ pub enum Record {
         end: u32,
         start_line: u32,
         end_line: u32,
+        /// Optional per-node metadata (string → string). Only the structural
+        /// `json` stream emits it today (`pointer`, `type`, `value`, `items`,
+        /// `truncated`); every other frontend omits it, so it defaults empty.
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        properties: std::collections::BTreeMap<String, String>,
     },
 
     /// `{"type":"function","id":"n13","parent":"...","name":"ComputeContentHash","params":["[]byte","int"],"file":"/abs/store.go","path":"/abs/store.go","start":1,"end":99,"start_line":34,"end_line":99}`

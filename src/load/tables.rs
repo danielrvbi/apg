@@ -46,6 +46,7 @@ pub fn build_load_files(graph: &Graph, dir: &Path) -> anyhow::Result<()> {
     let mut struct_end_line = Vec::new();
     let mut struct_ct = Vec::new();
     let mut struct_status = Vec::new();
+    let mut struct_props = Vec::new();
     let mut fn_fqn = Vec::new();
     let mut fn_path = Vec::new();
     let mut fn_start = Vec::new();
@@ -181,6 +182,7 @@ pub fn build_load_files(graph: &Graph, dir: &Path) -> anyhow::Result<()> {
                 struct_end_line.push(el);
                 struct_ct.push(node.code_type.clone());
                 struct_status.push(node.status.clone().unwrap_or_default());
+                struct_props.push(properties_json(&node.properties));
             }
             NodeKind::Function => {
                 fn_fqn.push(fqn.clone());
@@ -371,6 +373,7 @@ pub fn build_load_files(graph: &Graph, dir: &Path) -> anyhow::Result<()> {
             ("end_line", Col::I64(struct_end_line)),
             ("code_type", Col::Str(struct_ct)),
             ("status", Col::Str(struct_status)),
+            ("properties", Col::Str(struct_props)),
         ],
     )?;
     write_parquet(
@@ -1348,7 +1351,7 @@ pub fn create_schema(conn: &Connection) -> anyhow::Result<()> {
         "CREATE NODE TABLE Scan(fqn STRING PRIMARY KEY, git_sha STRING, git_clean STRING, content_key STRING, scanned_at STRING)",
     )?;
     conn.query(
-        "CREATE NODE TABLE Struct(fqn STRING PRIMARY KEY, path STRING, start INT64, `end` INT64, start_line INT64, end_line INT64, code_type STRING, status STRING)",
+        "CREATE NODE TABLE Struct(fqn STRING PRIMARY KEY, path STRING, start INT64, `end` INT64, start_line INT64, end_line INT64, code_type STRING, status STRING, properties STRING)",
     )?;
     conn.query(
         "CREATE NODE TABLE Function(fqn STRING PRIMARY KEY, path STRING, start INT64, `end` INT64, start_line INT64, end_line INT64, code_type STRING, status STRING)",

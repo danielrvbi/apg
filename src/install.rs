@@ -60,6 +60,10 @@ pub const SUITE_TOOLS: &[(&str, &str)] = &[
         include_str!("../opencode-suite/tools/apg_struct.ts"),
     ),
     (
+        "apg_json.ts",
+        include_str!("../opencode-suite/tools/apg_json.ts"),
+    ),
+    (
         "apg_callers.ts",
         include_str!("../opencode-suite/tools/apg_callers.ts"),
     ),

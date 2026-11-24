@@ -938,9 +938,18 @@ fn upsert_node(
             NodeKind::Module => format!("{{fqn: {}, status: {status}}}", lit(fqn)),
             NodeKind::Struct | NodeKind::Function => {
                 let (path, start, end, sl, el) = span(node);
+                // Only the Struct table carries the scanner `properties` column.
+                let props = if node.kind == NodeKind::Struct {
+                    format!(
+                        ", props: {}",
+                        lit(&crate::layers::properties_json(&node.properties))
+                    )
+                } else {
+                    String::new()
+                };
                 format!(
                     "{{fqn: {}, path: {}, start: {start}, end_pos: {end}, sline: {sl}, \
-                     eline: {el}, ctype: {}, status: {status}}}",
+                     eline: {el}, ctype: {}, status: {status}{props}}}",
                     lit(fqn),
                     lit(&path),
                     lit(&node.code_type),
@@ -1006,16 +1015,25 @@ pub(super) fn upsert_statement(label: &str, rows: &[String]) -> Option<String> {
         // The located kinds carry the same backstop alongside their location: a
         // `planned` row leaves a realized node's status untouched, while a
         // realized row writes its own cleared status and location.
-        "Struct" | "Function" => format!(
-            "UNWIND [{list}] AS row MERGE (n:{label} {{fqn: row.fqn}}) \
-             ON CREATE SET n.path = row.path, n.start = row.start, n.`end` = row.end_pos, \
-             n.start_line = row.sline, n.end_line = row.eline, \
-             n.code_type = row.ctype, n.status = row.status \
-             ON MATCH SET n.path = row.path, n.start = row.start, n.`end` = row.end_pos, \
-             n.start_line = row.sline, n.end_line = row.eline, n.code_type = row.ctype, \
-             n.status = CASE WHEN row.status = 'planned' \
-             AND (n.status IS NULL OR n.status <> 'planned') THEN n.status ELSE row.status END"
-        ),
+        "Struct" | "Function" => {
+            // The Struct table additionally carries the scanner `properties`
+            // column (`upsert_node` adds `props` to each Struct row).
+            let props = if label == "Struct" {
+                ", n.properties = row.props"
+            } else {
+                ""
+            };
+            format!(
+                "UNWIND [{list}] AS row MERGE (n:{label} {{fqn: row.fqn}}) \
+                 ON CREATE SET n.path = row.path, n.start = row.start, n.`end` = row.end_pos, \
+                 n.start_line = row.sline, n.end_line = row.eline, \
+                 n.code_type = row.ctype, n.status = row.status{props} \
+                 ON MATCH SET n.path = row.path, n.start = row.start, n.`end` = row.end_pos, \
+                 n.start_line = row.sline, n.end_line = row.eline, n.code_type = row.ctype{props}, \
+                 n.status = CASE WHEN row.status = 'planned' \
+                 AND (n.status IS NULL OR n.status <> 'planned') THEN n.status ELSE row.status END"
+            )
+        }
         "File" => format!(
             "UNWIND [{list}] AS row MERGE (n:File {{fqn: row.fqn}}) \
              ON CREATE SET n.start_line = row.sline, n.end_line = row.eline, \

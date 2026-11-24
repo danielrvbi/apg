@@ -385,6 +385,7 @@ agent to explore the graph directly — it will pick the right tool:
 | `apg_module_files` / `apg_module_structs` | files / types under a module |
 | `apg_file_units` / `apg_file_path` | what a file contains; path → module |
 | `apg_methods` / `apg_struct` | methods of a type; type + nested types |
+| `apg_json` | a JSON/JSONC file's tree (`fqn,lines,pointer,type,value`), optionally under a pointer prefix |
 | `apg_callers` / `apg_callees` | incoming / outgoing `Calls` |
 | `apg_uses` | `Uses` edges in/out of a unit |
 | `apg_unresolved` | unresolvable calls/uses for a unit or file |
@@ -646,7 +647,13 @@ present. For Rust: `test` = `*_test.rs` or a `test`/`tests` path segment;
   "structural": {
     "include": ["docs/**", "src/**"],
     "exclude": ["**/*.min.js"],
-    "code_type": "config"
+    "code_type": "config",
+    "json": {
+      "max_depth": 3,
+      "max_items": 50,
+      "max_nodes": 2000,
+      "overrides": [{ "glob": "deploy/**", "max_depth": 6 }]
+    }
   }
 }
 ```
@@ -665,6 +672,23 @@ frontends don't claim is graphed. Structural records take the `code_type`
 `config` unless `code_type` overrides it — except Markdown (`md`), which keeps
 the built-in `docs` classification; a matching `types` rule still takes
 precedence over this structural fallback.
+
+**JSON trees.** The `json` stream (`.json`, `.jsonc`, `package-lock.json`,
+`composer.lock`) parses JSONC — `//` and `/* */` comments and trailing commas
+are accepted — and graphs a bounded tree: each object member is a `Struct`
+named by its key, recursed to `max_depth` (a top-level key is depth 1); a
+scalar is a leaf carrying its `value`; a list of scalars, of lists or of mixed
+values is one leaf carrying the compact JSON of its first `max_items` elements
+as `items`; a list of objects becomes one `Struct` per element, a sibling of
+its key, named `<key>[id=foo]` (keyed by the first of `id`, `name` or `key`,
+else `<key>[<index>]`) and capped at `max_items`. Every node's `properties`
+column carries its RFC 6901 `pointer` and JSON `type`, and `truncated`
+(`depth`/`items`/`nodes`/`value`/`parse`) marks where a limit or a syntax error
+cut the tree. `structural.json` sets the limits (defaults 3 / 50 / 2000 nodes
+per file); the first `overrides` entry whose `glob` matches the repo-relative
+path overrides them; lockfiles (`package-lock.json`, `*.lock.json`,
+`composer.lock`) default to depth 1. A JSON file over 50 MB gets its `File`
+node only. `apg_json` lists a file's tree in line order.
 
 ## Java projects
 

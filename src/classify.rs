@@ -28,6 +28,12 @@ pub struct StructuralScope {
     pub exclude: Vec<String>,
     #[serde(default)]
     pub code_type: Option<String>,
+    /// The structural `json` stream's tree options (`max_depth`/`max_items`/
+    /// `max_nodes` plus glob-keyed `overrides`). The ingestor never interprets
+    /// it — `structfrontend` does — but it is graph-affecting, so it is kept
+    /// opaque here and folded into the cache-key classification digest.
+    #[serde(default)]
+    pub json: Option<serde_json::Value>,
 }
 
 /// Project-level classification config (apg.json), replacing the built-in

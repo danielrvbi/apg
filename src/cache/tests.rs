@@ -39,6 +39,7 @@ fn structural_scope() -> StructuralScope {
         include: vec!["**/*.yml".to_string()],
         exclude: vec!["vendor/**".to_string()],
         code_type: Some("config".to_string()),
+        json: None,
     }
 }
 
@@ -307,6 +308,15 @@ mod unit {
             }),
         };
         assert!(!ka.matches(&key(Some(&code_type_changed))));
+        let json_changed = ApgConfig {
+            default: "src".into(),
+            types: vec![code_type_rule("test", "**/tests/**")],
+            structural: Some(StructuralScope {
+                json: Some(serde_json::json!({"max_depth": 5})),
+                ..structural_scope()
+            }),
+        };
+        assert!(!ka.matches(&key(Some(&json_changed))));
         let no_structural = ApgConfig {
             default: "src".into(),
             types: vec![code_type_rule("test", "**/tests/**")],

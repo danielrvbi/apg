@@ -48,7 +48,7 @@ use crate::discovery::{in_scope, read_target_set, stream_for_path, walk};
 use crate::formats::dockerfile::emit_dockerfile;
 use crate::formats::emit_misc;
 use crate::formats::ini::emit_ini;
-use crate::formats::json::emit_json;
+use crate::formats::json::emit_json_with;
 use crate::formats::makefile::emit_makefile;
 use crate::formats::sh::emit_sh;
 use crate::formats::sln::emit_sln;
@@ -57,8 +57,34 @@ use crate::formats::xml::emit_xml;
 use crate::formats::yaml::emit_yaml;
 use crate::lines::line_count;
 use crate::md::build_doc;
-use crate::paths::{absolutize, repo_base, repo_relative_dir};
+use crate::paths::{absolutize, repo_base, repo_relative_dir, repo_relative_identity};
 use crate::record::{write_rec, Rec};
+
+/// A `json` file larger than this (50 MB) gets a `File` record only.
+const MAX_JSON_BYTES: u64 = 50 * 1024 * 1024;
+
+/// [`line_count`] for a file too large to hold in memory, read in chunks.
+fn count_lines_streaming(path: &std::path::Path) -> u32 {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return 1;
+    };
+    let mut buf = vec![0u8; 1 << 16];
+    let (mut newlines, mut last, mut any) = (0u32, b'\n', false);
+    while let Ok(n) = f.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        any = true;
+        newlines += buf[..n].iter().filter(|b| **b == b'\n').count() as u32;
+        last = buf[n - 1];
+    }
+    match (any, last == b'\n') {
+        (false, _) => 1,
+        (true, true) => newlines,
+        (true, false) => newlines + 1,
+    }
+}
 
 fn run(args: Args) -> io::Result<()> {
     let root = absolutize(&args.root);
@@ -109,6 +135,19 @@ fn run(args: Args) -> io::Result<()> {
     let mut next_id: u64 = 1;
 
     for (path, stream) in &files {
+        // An oversized JSON document gets its `File` record only: no read, no
+        // structure (a 50 MB data dump is not configuration).
+        if *stream == "json" && std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_JSON_BYTES) {
+            let module = repo_relative_dir(&base, path);
+            modules.insert(module.clone());
+            file_recs.push(Rec::File {
+                path: path.to_string_lossy().into_owned(),
+                parent: module,
+                start_line: 1,
+                end_line: count_lines_streaming(path),
+            });
+            continue;
+        }
         let Ok(bytes) = std::fs::read(path) else {
             eprintln!("warning: could not read {}", path.display());
             continue;
@@ -132,6 +171,7 @@ fn run(args: Args) -> io::Result<()> {
                             end: s.end,
                             start_line: s.start_line,
                             end_line: s.end_line,
+                            properties: Default::default(),
                         })
                         .collect(),
                     contains: doc
@@ -160,7 +200,13 @@ fn run(args: Args) -> io::Result<()> {
             ),
             "json" => (
                 repo_relative_dir(&base, path),
-                emit_json(path, &bytes, &args.id_prefix, &mut next_id),
+                emit_json_with(
+                    path,
+                    &bytes,
+                    &args.id_prefix,
+                    &mut next_id,
+                    scope.json.resolve(&repo_relative_identity(&base, path)),
+                ),
             ),
             "toml" => (
                 repo_relative_dir(&base, path),

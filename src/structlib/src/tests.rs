@@ -7,7 +7,7 @@ use crate::discovery::{in_scope, is_pruned_dir, stream_for_path, under_excluded_
 use crate::formats::dockerfile::emit_dockerfile;
 use crate::formats::emit_misc;
 use crate::formats::ini::emit_ini;
-use crate::formats::json::emit_json;
+use crate::formats::json::{emit_json, emit_json_with};
 use crate::formats::makefile::emit_makefile;
 use crate::formats::sh::emit_sh;
 use crate::formats::sln::emit_sln;
@@ -42,6 +42,30 @@ fn struct_rows(s: &Structure) -> Vec<(String, String, u32, u32)> {
             _ => unreachable!("a Structure holds only Struct records"),
         })
         .collect()
+}
+
+/// Every Struct's `properties`, in emission order.
+fn all_props(s: &Structure) -> Vec<std::collections::BTreeMap<String, String>> {
+    s.structs
+        .iter()
+        .map(|r| match r {
+            Rec::Struct { properties, .. } => properties.clone(),
+            _ => unreachable!("a Structure holds only Struct records"),
+        })
+        .collect()
+}
+
+/// Property `key` of the Struct rendering `fqn` (`parent.name`).
+fn prop(s: &Structure, fqn: &str, key: &str) -> Option<String> {
+    s.structs.iter().find_map(|r| match r {
+        Rec::Struct {
+            parent,
+            name,
+            properties,
+            ..
+        } if format!("{parent}.{name}") == fqn => Some(properties.get(key).cloned()),
+        _ => None,
+    })?
 }
 
 /// The `Struct` names, in emission order.
@@ -90,6 +114,7 @@ fn md_structure(doc: &Doc) -> Structure {
                 end: s.end,
                 start_line: s.start_line,
                 end_line: s.end_line,
+                properties: Default::default(),
             })
             .collect(),
         contains: doc
@@ -252,10 +277,189 @@ mod unit {
         let rows = struct_rows(&s);
         assert_eq!(
             rows.iter().map(|(n, ..)| n.as_str()).collect::<Vec<_>>(),
-            vec!["name", "nested", "list"]
+            vec!["name", "nested", "inner", "list"]
         );
-        assert_eq!(rows.iter().map(|r| r.2).collect::<Vec<_>>(), vec![2, 3, 6]);
-        assert!(s.contains.is_empty());
+        assert_eq!(
+            rows.iter().map(|r| (r.2, r.3)).collect::<Vec<_>>(),
+            vec![(2, 2), (3, 5), (4, 4), (6, 6)]
+        );
+        assert_eq!(
+            contains_fqns(&s),
+            vec![("data.json.nested".into(), "data.json.nested.inner".into())]
+        );
+        assert_eq!(prop(&s, "data.json.name", "value"), Some("x".into()));
+        assert_eq!(
+            prop(&s, "data.json.nested.inner", "pointer"),
+            Some("/nested/inner".into())
+        );
+        assert_eq!(prop(&s, "data.json.nested", "type"), Some("object".into()));
+        assert_eq!(prop(&s, "data.json.list", "items"), Some("[1,2]".into()));
+        assert_eq!(prop(&s, "data.json.list", "truncated"), None);
+    }
+
+    #[test]
+    fn jsonc_comments_and_trailing_commas_are_tolerated() {
+        let src = "// tsconfig\n\
+                   {\n\
+                   \x20 /* compiler */\n\
+                   \x20 \"compilerOptions\": {\n\
+                   \x20   \"strict\": true, // yes\n\
+                   \x20   \"paths\": {\"@/*\": [\"src/*\",],},\n\
+                   \x20 },\n\
+                   }\n";
+        let s = emit(emit_json, "tsconfig.json", src);
+        assert_eq!(names(&s), vec!["compilerOptions", "strict", "paths", "@/*"]);
+        assert_eq!(
+            prop(&s, "tsconfig.json.compilerOptions.strict", "value"),
+            Some("true".into())
+        );
+        assert_eq!(
+            prop(&s, "tsconfig.json.compilerOptions.paths.@/*", "pointer"),
+            Some("/compilerOptions/paths/@~1*".into())
+        );
+        assert_eq!(
+            prop(&s, "tsconfig.json.compilerOptions.paths.@/*", "items"),
+            Some("[\"src/*\"]".into())
+        );
+        assert!(all_props(&s).iter().all(|p| p.get("truncated").is_none()));
+    }
+
+    #[test]
+    fn json_depth_limit_marks_truncated() {
+        let src = "{\"a\": {\"b\": {\"c\": {\"d\": 1}}}}";
+        let s = emit(emit_json, "d.json", src);
+        assert_eq!(names(&s), vec!["a", "b", "c"]);
+        assert_eq!(prop(&s, "d.json.a.b.c", "truncated"), Some("depth".into()));
+        // A lockfile is forced to depth 1 by default.
+        let s = emit(emit_json, "package-lock.json", src);
+        assert_eq!(names(&s), vec!["a"]);
+        assert_eq!(
+            prop(&s, "package-lock.json.a", "truncated"),
+            Some("depth".into())
+        );
+        // An explicit option raises it again.
+        let mut next = 1u64;
+        let opts = crate::config::JsonOptions {
+            max_depth: 10,
+            ..Default::default()
+        };
+        let s = emit_json_with(Path::new("d.json"), src.as_bytes(), "n", &mut next, opts);
+        assert_eq!(names(&s), vec!["a", "b", "c", "d"]);
+    }
+
+    #[test]
+    fn json_object_lists_are_keyed_and_capped() {
+        let src = "{\"servers\": [\n\
+                   {\"id\": \"web\", \"port\": 80},\n\
+                   {\"name\": \"db\"},\n\
+                   {\"key\": 7},\n\
+                   {\"other\": 1}\n\
+                   ]}";
+        let s = emit(emit_json, "s.json", src);
+        assert_eq!(
+            names(&s),
+            vec![
+                "servers[id=web]",
+                "id",
+                "port",
+                "servers[name=db]",
+                "name",
+                "servers[key=7]",
+                "key",
+                "servers[3]",
+                "other"
+            ]
+        );
+        assert_eq!(
+            prop(&s, "s.json.servers[id=web]", "pointer"),
+            Some("/servers/0".into())
+        );
+        assert_eq!(
+            prop(&s, "s.json.servers[id=web].port", "pointer"),
+            Some("/servers/0/port".into())
+        );
+        assert_eq!(struct_rows(&s)[0].2, 2);
+
+        let many: Vec<String> = (0..60).map(|i| format!("{{\"id\": {i}}}")).collect();
+        let src = format!("{{\"l\": [{}]}}", many.join(","));
+        let s = emit(emit_json, "m.json", &src);
+        let elems: Vec<String> = names(&s)
+            .into_iter()
+            .filter(|n| n.starts_with("l["))
+            .collect();
+        assert_eq!(elems.len(), 50);
+        assert_eq!(
+            prop(&s, "m.json.l[id=49]", "truncated"),
+            Some("items".into())
+        );
+        assert_eq!(prop(&s, "m.json.l[id=49]", "count"), Some("60".into()));
+    }
+
+    #[test]
+    fn json_scalar_lists_cap_items() {
+        let nums: Vec<String> = (0..60).map(|i| i.to_string()).collect();
+        let src = format!(
+            "{{\"n\": [{}], \"mixed\": [1, \"a\", [2]], \"e\": []}}",
+            nums.join(",")
+        );
+        let s = emit(emit_json, "l.json", &src);
+        assert_eq!(names(&s), vec!["n", "mixed", "e"]);
+        assert_eq!(prop(&s, "l.json.n", "truncated"), Some("items".into()));
+        assert_eq!(prop(&s, "l.json.n", "count"), Some("60".into()));
+        assert_eq!(
+            prop(&s, "l.json.mixed", "items"),
+            Some("[1,\"a\",[2]]".into())
+        );
+        assert_eq!(prop(&s, "l.json.e", "items"), Some("[]".into()));
+    }
+
+    #[test]
+    fn json_node_budget_marks_truncated() {
+        let mut next = 1u64;
+        let opts = crate::config::JsonOptions {
+            max_nodes: 3,
+            ..Default::default()
+        };
+        let src = "{\"a\": {\"x\": 1, \"y\": 2, \"z\": 3}, \"b\": 1}";
+        let s = emit_json_with(Path::new("b.json"), src.as_bytes(), "n", &mut next, opts);
+        assert_eq!(names(&s), vec!["a", "x", "y"]);
+        assert_eq!(prop(&s, "b.json.a", "truncated"), Some("nodes".into()));
+    }
+
+    #[test]
+    fn json_malformed_keeps_parsed_prefix() {
+        let src = "{\n  \"ok\": 1,\n  \"bad\": {\"x\": tru\n";
+        let s = emit(emit_json, "bad.json", src);
+        assert_eq!(names(&s), vec!["ok", "bad"]);
+        assert_eq!(prop(&s, "bad.json.bad", "truncated"), Some("parse".into()));
+        assert!(emit(emit_json, "e.json", "").structs.is_empty());
+        assert!(emit(emit_json, "c.json", "// only a comment\n")
+            .structs
+            .is_empty());
+        // A scalar root is one `$` node.
+        let s = emit(emit_json, "r.json", "42");
+        assert_eq!(prop(&s, "r.json.$", "value"), Some("42".into()));
+        assert_eq!(prop(&s, "r.json.$", "pointer"), Some("".into()));
+    }
+
+    #[test]
+    fn json_pointer_escapes_tilde_and_slash() {
+        let s = emit(emit_json, "p.json", "{\"a~b/c\": 1}");
+        assert_eq!(prop(&s, "p.json.a~b/c", "pointer"), Some("/a~0b~1c".into()));
+    }
+
+    #[test]
+    fn json_config_resolves_overrides_and_lockfiles() {
+        let cfg: crate::config::JsonConfig = serde_json::from_str(
+            r#"{"max_depth": 2, "overrides": [{"glob": "deep/*", "max_depth": 6}, {"glob": "*composer.lock", "max_depth": 4}]}"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.resolve("a/b.json").max_depth, 2);
+        assert_eq!(cfg.resolve("deep/x.json").max_depth, 6);
+        assert_eq!(cfg.resolve("x/package-lock.json").max_depth, 1);
+        assert_eq!(cfg.resolve("app.lock.json").max_depth, 1);
+        assert_eq!(cfg.resolve("composer.lock").max_depth, 4);
+        assert_eq!(cfg.resolve("a.json").max_items, 50);
     }
 
     #[test]
@@ -480,6 +684,8 @@ mod unit {
             ("a.yml", Some("yaml")),
             ("a.json", Some("json")),
             ("package-lock.json", Some("json")),
+            ("opencode.jsonc", Some("json")),
+            ("composer.lock", Some("json")),
             ("a.toml", Some("toml")),
             ("Cargo.lock", Some("toml")),
             ("a.xml", Some("xml")),
@@ -538,6 +744,7 @@ mod unit {
             include: vec!["src/**".into()],
             exclude: vec!["src/gen/**".into()],
             code_type: None,
+            json: Default::default(),
         };
         let base = Path::new("/repo");
         assert!(in_scope(
@@ -814,6 +1021,8 @@ mod int {
             (".gitignore", Some("misc")),
             ("Cargo.lock", Some("toml")),
             ("package-lock.json", Some("json")),
+            ("opencode.jsonc", Some("json")),
+            ("composer.lock", Some("json")),
         ];
         for (path, want) in routed {
             assert_eq!(stream_for_path(Path::new(path)), want, "routing for {path}");
@@ -824,6 +1033,7 @@ mod int {
             include: vec!["src/**".into()],
             exclude: vec!["src/gen/**".into()],
             code_type: None,
+            json: Default::default(),
         };
         let root = Path::new("/repo");
         assert!(in_scope(

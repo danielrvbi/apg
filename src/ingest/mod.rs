@@ -772,6 +772,7 @@ fn ingest_records(
                     end,
                     start_line,
                     end_line,
+                    properties,
                 } => {
                     declared_ids.insert(id.clone());
                     let fqn = format!(
@@ -800,6 +801,7 @@ fn ingest_records(
                             }),
                             category: None,
                             code_type,
+                            properties,
                             ..Node::default()
                         },
                         progress.as_deref_mut(),
