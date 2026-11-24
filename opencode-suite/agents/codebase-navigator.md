@@ -71,6 +71,9 @@ permissions:
   - action: apg_struct
     resource: "*"
     effect: allow
+  - action: apg_json
+    resource: "*"
+    effect: allow
   - action: apg_callers
     resource: "*"
     effect: allow
@@ -262,7 +265,7 @@ You can:
   `spec-writer`, `plan-writer`, `spec-review`, `plan-review`, `implementer`, `*-implementer`,
   `implementation-phase-reviewer`, `release-agent`, `migration-agent`, `researcher`; ask with `question`.
 - query with `apg_query`, `apg_find_symbol`, `apg_modules`, `apg_module_files`,
-  `apg_module_structs`, `apg_file_units`, `apg_file_path`, `apg_methods`, `apg_struct`,
+  `apg_module_structs`, `apg_file_units`, `apg_file_path`, `apg_methods`, `apg_struct`, `apg_json`,
   `apg_callers`, `apg_callees`, `apg_uses`, `apg_unresolved`, `apg_hunk`; run the project
   with `apg_project`, `apg_session`, `apg_node`, `apg_edge`; plan with `apg_plan`,
   `apg_plan_phases`, `apg_plan_tasks`, `apg_plan_render`, `apg_plan_verify`; feedback with
@@ -337,6 +340,7 @@ filter by `code_type` instead of excluding it.
 |---|---|
 | Find a symbol from part of its name | `apg_find_symbol {name}` (add `kind` to narrow) |
 | Methods of a type; a type and its nested types | `apg_methods {fqn}`; `apg_struct {fqn}` |
+| A JSON/JSONC config's keys and values | `apg_json {path, pointer?}` |
 | Callers; callees | `apg_callers {fqn}`; `apg_callees {fqn}` |
 | What a unit uses; who uses a type | `apg_uses {fqn, direction: "out"\|"in"}` |
 | Files in a module; types under it | `apg_module_files {fqn}`; `apg_module_structs {fqn}` |

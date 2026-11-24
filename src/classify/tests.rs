@@ -194,6 +194,7 @@ mod unit {
                 include: Vec::new(),
                 exclude: Vec::new(),
                 code_type: Some("cfg".to_string()),
+                json: None,
             }),
         };
         assert_eq!(

@@ -34,8 +34,12 @@ pub const JSONL_SCHEMA_VERSION: &str = "1";
 /// .ps1/.psm1/.psd1 files are claimed by the ps stream rather than the
 /// structural misc stream, so a `4` projection lacks the ps file edges and
 /// holds misc units for PowerShell files (the cache-key token changes, older
-/// units miss and one correctness full scan re-records them).
-pub const PROJECTION_RULES_VERSION: &str = "5";
+/// units miss and one correctness full scan re-records them). v6: a Struct
+/// carries scanner-emitted `properties` (the structural `json` stream's
+/// pointer/type/value/items/truncated, stored in the Struct table's
+/// `properties` column) and `.jsonc`/`composer.lock` route to `json`, so a `5`
+/// unit lacks them.
+pub const PROJECTION_RULES_VERSION: &str = "6";
 
 /// The scan config identity folded into the global cache key: the exact set of
 /// languages, path excludes, and module restrictions a scan ran with, plus the
@@ -100,6 +104,12 @@ fn classification_render(cfg: &ApgConfig) -> String {
             out.push_str(&scope.include.join("\0"));
             out.push_str("\0code_type\0");
             out.push_str(scope.code_type.as_deref().unwrap_or(""));
+            // `serde_json::Value` objects are key-sorted, so this rendering is
+            // canonical for equal option blocks.
+            out.push_str("\0json\0");
+            if let Some(json) = &scope.json {
+                out.push_str(&json.to_string());
+            }
         }
         None => out.push_str("none"),
     }

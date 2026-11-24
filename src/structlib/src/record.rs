@@ -1,5 +1,6 @@
 //! The unified JSONL record types (SPEC §2) and the record writer.
 
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 
 /// Unified JSONL records (SPEC §2). `id` is a scanner-local opaque counter; the
@@ -25,6 +26,10 @@ pub(crate) enum Rec {
         end: u32,
         start_line: u32,
         end_line: u32,
+        /// Per-node metadata (string → string); only the `json` stream sets it,
+        /// and an empty map is omitted so every other stream's JSONL is unchanged.
+        #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+        properties: BTreeMap<String, String>,
     },
     Contains {
         from: String,

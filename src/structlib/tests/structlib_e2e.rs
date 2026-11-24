@@ -264,4 +264,68 @@ mod e2e {
 
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    #[test]
+    #[ignore = "e2e tier: spawns the built structfrontend against a scratch /tmp dir; run via cargo test-e2e"]
+    fn structfrontend_json_tree_config_and_size_cap() {
+        let dir =
+            std::fs::canonicalize(scratch_dir("json-tree")).expect("canonicalize scratch dir");
+        std::fs::create_dir_all(dir.join("apg")).expect("mkdir apg");
+        std::fs::write(
+            dir.join("apg/config.json"),
+            r#"{"structural": {"json": {"max_depth": 1, "overrides": [{"glob": "deep/*", "max_depth": 5}]}}}"#,
+        )
+        .expect("write config");
+        std::fs::create_dir_all(dir.join("deep")).expect("mkdir deep");
+        let doc = "{\"a\": {\"b\": {\"c\": 1}}} // jsonc\n";
+        std::fs::write(dir.join("shallow.jsonc"), doc).expect("write shallow");
+        std::fs::write(dir.join("deep/x.json"), doc).expect("write deep");
+        // Just over the 50 MB cap: a File record, no structure.
+        let big = dir.join("big.json");
+        let f = std::fs::File::create(&big).expect("create big");
+        f.set_len(50 * 1024 * 1024 + 1).expect("size big");
+
+        let out = std::process::Command::new(structfrontend_bin())
+            .arg(&dir)
+            .args(["--stream", "json"])
+            .output()
+            .expect("spawn structfrontend");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let recs: Vec<serde_json::Value> = String::from_utf8(out.stdout)
+            .expect("utf8")
+            .lines()
+            .map(|l| serde_json::from_str(l).expect("jsonl record"))
+            .collect();
+        let structs_in = |file: &str| -> Vec<String> {
+            recs.iter()
+                .filter(|r| {
+                    r["type"] == "struct" && r["path"].as_str().is_some_and(|p| p.ends_with(file))
+                })
+                .map(|r| r["name"].as_str().unwrap_or("").to_string())
+                .collect()
+        };
+        assert_eq!(structs_in("shallow.jsonc"), vec!["a"]);
+        assert_eq!(structs_in("deep/x.json"), vec!["a", "b", "c"]);
+        assert!(structs_in("big.json").is_empty());
+        assert!(recs
+            .iter()
+            .any(|r| r["type"] == "file"
+                && r["path"].as_str().is_some_and(|p| p.ends_with("big.json"))));
+        let a = recs
+            .iter()
+            .find(|r| {
+                r["type"] == "struct"
+                    && r["path"]
+                        .as_str()
+                        .is_some_and(|p| p.ends_with("shallow.jsonc"))
+            })
+            .expect("shallow a");
+        assert_eq!(a["properties"]["pointer"], "/a");
+        assert_eq!(a["properties"]["truncated"], "depth");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

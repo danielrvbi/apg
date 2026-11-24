@@ -324,6 +324,7 @@ mod e2e {
                 end: 9,
                 start_line: 3,
                 end_line: 5,
+                properties: Default::default(),
             },
             Record::Function {
                 id: "f1".to_string(),

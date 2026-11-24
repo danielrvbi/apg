@@ -3365,6 +3365,7 @@ mod e2e {
             ("apg_file_path", "*", "allow"),
             ("apg_methods", "*", "allow"),
             ("apg_struct", "*", "allow"),
+            ("apg_json", "*", "allow"),
             ("apg_callers", "*", "allow"),
             ("apg_callees", "*", "allow"),
             ("apg_uses", "*", "allow"),
@@ -3386,8 +3387,8 @@ mod e2e {
             .collect();
         assert_eq!(
             actual.len(),
-            38,
-            "the researcher grant array is pinned at 38 rules"
+            39,
+            "the researcher grant array is pinned at 39 rules"
         );
         assert_eq!(
             actual, expected,
@@ -3564,6 +3565,7 @@ mod e2e {
             ("apg_file_path", "*", "allow"),
             ("apg_methods", "*", "allow"),
             ("apg_struct", "*", "allow"),
+            ("apg_json", "*", "allow"),
             ("apg_callers", "*", "allow"),
             ("apg_callees", "*", "allow"),
             ("apg_uses", "*", "allow"),

@@ -309,7 +309,7 @@ The project builds a single `apg` binary (package `apg`):
 `src/install.rs` via `include_str!`): `apg_scan`, `apg_query`, plus curated
 abstractions over common lookups — `apg_find_symbol`, `apg_modules`,
 `apg_module_files`, `apg_module_structs`, `apg_file_units`, `apg_file_path`,
-`apg_methods`, `apg_struct`, `apg_callers`, `apg_callees`, `apg_uses`,
+`apg_methods`, `apg_struct`, `apg_json`, `apg_callers`, `apg_callees`, `apg_uses`,
 `apg_unresolved`, `apg_hunk` — and the project/spec/plan/review suite:
 `apg_project` (start/verify/merge), `apg_node` / `apg_edge` (durable
 node-file add/update/rm mutations), `apg_session` (start a detached live

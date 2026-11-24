@@ -75,6 +75,9 @@ permissions:
   - action: apg_struct
     resource: "*"
     effect: allow
+  - action: apg_json
+    resource: "*"
+    effect: allow
   - action: apg_callers
     resource: "*"
     effect: allow

@@ -17,6 +17,7 @@ fn srec(id: &str, parent: &str, name: &str, path: &str) -> Record {
         end: 1,
         start_line: 1,
         end_line: 1,
+        properties: Default::default(),
     }
 }
 

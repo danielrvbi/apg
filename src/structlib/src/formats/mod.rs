@@ -6,7 +6,8 @@
 // counter. Structure depth is deliberately minimal but useful
 // (`requirements.constraint.structural-format-structure-table`): shell
 // functions, top-level keys/jobs/steps, tables/keys, elements,
-// stages/instructions, targets/variables/includes, sections/keys.
+// stages/instructions, targets/variables/includes, sections/keys — and the
+// `json` stream's bounded object/value tree (`formats::json`).
 
 use std::path::Path;
 
@@ -15,6 +16,7 @@ use crate::builder::Structure;
 pub(crate) mod dockerfile;
 pub(crate) mod ini;
 pub(crate) mod json;
+pub(crate) mod jsontree;
 pub(crate) mod makefile;
 pub(crate) mod sh;
 pub(crate) mod sln;

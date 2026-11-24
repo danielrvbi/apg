@@ -15,6 +15,102 @@ pub(crate) struct StructuralScope {
     pub(crate) exclude: Vec<String>,
     #[serde(default)]
     pub(crate) code_type: Option<String>,
+    /// The `json` stream's tree options (`structural.json`).
+    #[serde(default)]
+    pub(crate) json: JsonConfig,
+}
+
+/// One set of `json` tree limits; an absent field inherits.
+#[derive(serde::Deserialize, Default, Clone)]
+pub(crate) struct JsonLimits {
+    #[serde(default)]
+    pub(crate) max_depth: Option<u32>,
+    #[serde(default)]
+    pub(crate) max_items: Option<u32>,
+    #[serde(default)]
+    pub(crate) max_nodes: Option<u32>,
+}
+
+/// A glob-keyed override of the `json` limits for the files it matches
+/// (matched against the repo-relative path; first match wins).
+#[derive(serde::Deserialize, Default, Clone)]
+pub(crate) struct JsonOverride {
+    pub(crate) glob: String,
+    #[serde(flatten)]
+    pub(crate) limits: JsonLimits,
+}
+
+/// The `structural.json` section: the global limits plus per-glob overrides.
+#[derive(serde::Deserialize, Default, Clone)]
+pub(crate) struct JsonConfig {
+    #[serde(flatten)]
+    pub(crate) limits: JsonLimits,
+    #[serde(default)]
+    pub(crate) overrides: Vec<JsonOverride>,
+}
+
+/// The effective `json` tree limits for one file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct JsonOptions {
+    /// Object nesting levels emitted as nodes (a top-level key is depth 1).
+    pub(crate) max_depth: u32,
+    /// List elements emitted per list (object lists) or recorded in `items`.
+    pub(crate) max_items: u32,
+    /// Struct records emitted per file.
+    pub(crate) max_nodes: u32,
+}
+
+impl Default for JsonOptions {
+    fn default() -> Self {
+        Self {
+            max_depth: 3,
+            max_items: 50,
+            max_nodes: 2000,
+        }
+    }
+}
+
+impl JsonOptions {
+    fn apply(&mut self, l: &JsonLimits) {
+        if let Some(v) = l.max_depth {
+            self.max_depth = v;
+        }
+        if let Some(v) = l.max_items {
+            self.max_items = v;
+        }
+        if let Some(v) = l.max_nodes {
+            self.max_nodes = v;
+        }
+    }
+}
+
+/// True for the lockfiles forced to depth 1 by default: `package-lock.json`,
+/// `*.lock.json` and `composer.lock`.
+pub(crate) fn is_json_lockfile(file_name: &str) -> bool {
+    let lower = file_name.to_ascii_lowercase();
+    lower == "package-lock.json" || lower == "composer.lock" || lower.ends_with(".lock.json")
+}
+
+impl JsonConfig {
+    /// The effective limits for the file at repo-relative `rel_path`: the
+    /// built-in defaults, then the global `structural.json` limits, then the
+    /// lockfile depth-1 default, then the first matching override.
+    pub(crate) fn resolve(&self, rel_path: &str) -> JsonOptions {
+        let mut o = JsonOptions::default();
+        o.apply(&self.limits);
+        let name = rel_path.rsplit('/').next().unwrap_or(rel_path);
+        if is_json_lockfile(name) {
+            o.max_depth = 1;
+        }
+        if let Some(ov) = self
+            .overrides
+            .iter()
+            .find(|ov| glob_match(&ov.glob, rel_path))
+        {
+            o.apply(&ov.limits);
+        }
+        o
+    }
 }
 
 /// The subset of `apg/config.json` this frontend reads (unknown keys, including
